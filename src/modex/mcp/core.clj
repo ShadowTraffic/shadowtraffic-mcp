@@ -5,7 +5,9 @@
             [clojure.core :as cc]
             [clojure.repl] ; just for pst stack trace.
             [taoensso.timbre :as log]
-            [nrepl.server :as nrepl])
+            [nrepl.server :as nrepl]
+            [clojure.java.shell :refer [sh]])
+  (:import [java.io File])
   (:gen-class))
 
 ; Optional nREPL for live dev:
@@ -16,46 +18,54 @@
 
 (def !server-ready? (atom false))
 
+(defn to-raw-temp-file [raw-contents]
+  (let [config-file-base (str (random-uuid))
+        config-file-extension ".txt"
+        config-file-name (str config-file-base config-file-extension)
+        config-file (File/createTempFile config-file-base config-file-extension)]
+    (spit config-file raw-contents)
+    (.getAbsolutePath config-file)))
+
 (def my-tools
   "Define your tools here."
   (tools/tools
-    (greet
-      "Greets a person by name."
-      ; Tool handler arguments support {:keys [...] destructuring with maps for :doc, :type and :or.
-      ; Presence in :or implies optionality.
-      [{:keys [first-name last-name]
-        :doc  {first-name "A person's first name."
-               last-name  "A person's last name."}
-        :type {first-name :string
-               last-name  :string}
-        :or   {last-name nil}}]                             ; last-name is optional, first-name required
-      ; Presently, tools should return collections.
-      ; Upcoming change: tools will return a map of {:keys [success results ?error]}.
-      [(str "Hello from Modex, "
-            (if last-name
-              (str first-name " " last-name)
-              first-name) "!")])
+    (bootstrap
+     "Converts an Avro or JSON Schema into a ShadowTraffic configuration."
+     [^{:type :string :doc "The kind of schema - Avro or JSON Schema."} kind
+      ^{:type :string :doc "The schema as a string."} schema]
+     [(let [from (if (= kind "JSON Schema")
+                   "--bootstrap-from-json-schema"
+                   "--bootstrap-from-avro-schema")
+            tmp-file (to-raw-temp-file schema)]
+        (sh "docker" "run"
+            "--rm" "-i" "--network" "host"
+            "-v" (str tmp-file ":/home/schema")
+            "-e" "LICENSE_ID"
+            "-e" "LICENSE_EMAIL"
+            "-e" "LICENSE_ORGANIZATION"
+            "-e" "LICENSE_EDITION"
+            "-e" "LICENSE_EXPIRATION"
+            "-e" "LICENSE_SIGNATURE"
+            "shadowtraffic/shadowtraffic:latest"
+            "--action" "bootstrap"
+            from "/home/schema"
+            "--bootstrap-to" "kafka"))])
 
-    (inc
-      "Increments a number."
-      ; also support vector arg-style with metadata. :required default is true.
-      [^{:type :number :doc "x is a number to increment."} x]
-      [(cc/inc x)])
-
-    (range
-      "Calls (range n) in Clojure and returns a seq."       ; demonstrates seq returns
-      [^{:type :number :doc "(range n)"} n]
-      (cc/range n)) ; note (cc/range n) returns a coll.
-
-    (add "Adds two numbers."
-         [^{:type :number, :doc "1st Number"} a
-          ^{:type :number, :doc "2nd number"} b]
-         [(+ a b)])))
-
-(comment
-  (tools/invoke-handler (get-in my-tools [:range :handler]) {:n 5})
-  (tools/invoke-handler (get-in my-tools [:greet :handler]) {:first-name "Petrus"})
-  (tools/invoke-handler (get-in my-tools [:add :handler]) {:a 10 :b 6}))
+    (run-shadowtraffic
+     "Runs ShadowTraffic for the given configuration."
+     [^{:type :string :doc "The ShadowTraffic config"} config]
+     [(let [tmp-file (to-raw-temp-file config)]
+        (sh "docker" "run"
+            "--rm" "-i" "--network" "host"
+            "-v" (str tmp-file ":/home/config.json")
+            "-e" "LICENSE_ID"
+            "-e" "LICENSE_EMAIL"
+            "-e" "LICENSE_ORGANIZATION"
+            "-e" "LICENSE_EDITION"
+            "-e" "LICENSE_EXPIRATION"
+            "-e" "LICENSE_SIGNATURE"
+            "shadowtraffic/shadowtraffic:latest"
+            "--config" "/home/config.json"))])))
 
 (defn init-server
   "Blocking init function for long-running I/O like connecting to remote databases.
