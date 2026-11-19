@@ -1,17 +1,19 @@
 # ShadowTraffic MCP Server
 
-A Model Context Protocol (MCP) server that provides tools for generating test data with ShadowTraffic.
+A Model Context Protocol (MCP) server that provides tools for generating test data with [ShadowTraffic](https://shadowtraffic.io). Built in Clojure on the official [MCP Java SDK](https://github.com/modelcontextprotocol/java-sdk).
 
 ## Tools
 
-- **bootstrap**: Convert Avro or JSON Schema into ShadowTraffic configuration
-- **run-shadowtraffic**: Execute ShadowTraffic with a given configuration
+- **bootstrap**: Convert an Avro or JSON Schema into a ShadowTraffic configuration. Takes an optional `target` connection type (defaults to `kafka`).
+- **run-shadowtraffic**: Run ShadowTraffic with a given configuration. ShadowTraffic runs indefinitely unless the config sets limits like `maxEvents`, so the container is stopped after `timeout-seconds` (default 30) and the output so far is returned. Only the last ~20 KB of output is returned.
+
+Non-zero exits are reported to the client as tool errors.
 
 ## Building
 
 ### Prerequisites
 
-- Java 11+
+- Java 17+
 - Clojure CLI
 - Docker (for ShadowTraffic tools)
 - ShadowTraffic license environment variables
@@ -21,14 +23,10 @@ A Model Context Protocol (MCP) server that provides tools for generating test da
 1. Clone the repository
 2. Build the uberjar:
    ```bash
-   ./build.sh
-   ```
-   Or manually:
-   ```bash
    clojure -T:build uber
    ```
 
-This creates `target/modex-0.3.0.jar`
+This creates `target/shadowtraffic-mcp.jar`
 
 ## Configuration
 
@@ -53,7 +51,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "shadowtraffic": {
       "command": "java",
-      "args": ["-jar", "/path/to/shadowtraffic-mcp/target/modex-0.3.0.jar"],
+      "args": ["-jar", "/path/to/shadowtraffic-mcp/target/shadowtraffic-mcp.jar"],
       "env": {
         "LICENSE_ID": "your-license-id",
         "LICENSE_EMAIL": "your-email",
@@ -71,20 +69,14 @@ Restart Claude Desktop to load the server.
 
 ## Development
 
-### nREPL Support
-
-Set environment variables to enable nREPL:
-```bash
-export NREPL_BIND_ADDRESS=127.0.0.1
-export NREPL_PORT=4001
-```
-
 ### Testing
 
 ```bash
 clojure -X:test
 ```
 
+The `run-container-test` integration test runs a small `alpine` container and is skipped when Docker isn't available.
+
 ## License
 
-GPLv3 for non-commercial use. Commercial license available for $20.
+Licensed under the [Apache License, Version 2.0](LICENSE).
